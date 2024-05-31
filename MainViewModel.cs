@@ -1,10 +1,6 @@
 ﻿using GalaSoft.MvvmLight.CommandWpf;
 
-using Newtonsoft.Json.Serialization;
-
 using PropertyChanged;
-
-using Refit;
 
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
@@ -14,25 +10,24 @@ using System.Windows.Input;
 namespace Timer;
 public class MainViewModel : INotifyPropertyChanged
 {
-	public TimerSettings Settings { get; }
+	public TimerSettings Settings { get; private set; } = new();
 
-	private readonly IKimaiApi _kimaiApi;
 	private KimaiSheetEntry CurrentEntry { get; set; }
 
 	public string Description { get => CurrentEntry.Description; set => CurrentEntry.Description = value; }
 	public ICommand StartCommand { get; }
 	public ICommand StopCommand { get; }
 
-	public bool IsStarted => Settings.CurrentTimesheetEntryId.HasValue;
+	public bool IsStarted => Settings?.CurrentTimesheetEntryId.HasValue ?? false;
 	public bool IsNotStarted => !IsStarted;
 	public bool IsReady { get; set; } = false;
 
 	[OnChangedMethod(nameof(OnSelectedProjectAndActivityChanged))]
-	public KimaiActivity SelectedActivity { get; set; }
+	public KimaiActivity? SelectedActivity { get; set; }
 
 
 	[OnChangedMethod(nameof(OnSelectedProjectAndActivityChanged))]
-	public KimaiProject SelectedProject { get; set; }
+	public KimaiProject? SelectedProject { get; set; }
 
 	public IEnumerable<KimaiProject>? Projects { get; set; }
 	public IEnumerable<KimaiActivity>? Activites { get; private set; }
@@ -47,59 +42,61 @@ public class MainViewModel : INotifyPropertyChanged
 
 	public MainViewModel()
 	{
-		Settings = TimerSettings.Load();
-		if (Settings.Server == "")
-		{
-			if (TryAuthorize() is not bool res)
-			{
-				Application.Current.Shutdown();
-			}
-		}
-
-
-		var serveradress = $"{Settings.Server}/api";
-		// Initialize Refit API interface
-		var settings = new RefitSettings()
-		{
-			AuthorizationHeaderValueGetter = (r, c) => Task.FromResult(Settings.Token),
-			ContentSerializer = new NewtonsoftJsonContentSerializer(new()
-			{
-				//PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-				DateFormatHandling = Newtonsoft.Json.DateFormatHandling.IsoDateFormat,
-				DateFormatString = "yyyy-MM-ddTHH:mm:ss",
-				ContractResolver = new CamelCasePropertyNamesContractResolver()
-			})
-		};
-		//var httpClient = new HttpClient(new HttpLoggingHandler()) { BaseAddress = new Uri(serveradress) };
-		//httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {Settings.Token}");
-		//_kimaiApi = RestService.For<IKimaiApi>(httpClient, settings);
-		_kimaiApi = RestService.For<IKimaiApi>(serveradress, settings);
-
 		StartCommand = new RelayCommand(Start);
 		StopCommand = new RelayCommand(Stop);
 
 		CurrentEntry = new();
 	}
 
-
-	public bool? TryAuthorize()
+	/// <summary>
+	/// This will run until the connection is established.
+	/// If the process is cancelled (e.g. by closing the settings window), the application will be shut down.
+	/// </summary>
+	private async Task<bool> MakeSureConnected()
 	{
-		var window = new SettingsWindow(Settings);
-		var code = window.ShowDialog();
-		TimerSettings.Save();
-		return code;
+		if (await InitializeSettingsAndCreateApi() is false)
+		{
+			Application.Current.Shutdown();
+			return false;
+		}
+		return true;
+	}
+
+	/// <summary>
+	/// Loads the settings and creates the <see cref="KimaiApi.Api"/>.
+	/// </summary>
+	private async Task<bool?> InitializeSettingsAndCreateApi()
+	{
+		// first, loads the settings. With these settings, try to create the api. If that fails
+
+		Settings = TimerSettings.Load();
+
+		// when creating the api fails, we need to show the settings window
+		if (KimaiApi.CreateApi(Settings) is null || await KimaiApi.CheckAuthorized() == false)
+		{
+			// settingswindow will create the api before allowing it to quit
+			var window = new SettingsWindow(Settings);
+			var code = window.ShowDialog();
+			TimerSettings.Save();
+			return code;
+		}
+		else
+			return true;
 	}
 
 
-
+	/// <summary>
+	/// Starts a new entry.
+	/// </summary>
 	private async void Start()
 	{
 		try
 		{
+			// the keys of the dictionary must not be changed. The api expects them.
 			var entry = new Dictionary<string, object>()
 			{
-				{ "begin", DateTime.UtcNow },
-				{ "end", DateTime.UtcNow },
+				{ "begin", DateTime.Now },
+				{ "end", DateTime.Now },
 				{ "project", SelectedProject?.ID ?? 2 },
 				{ "activity", SelectedActivity?.ID ?? 1 },
 				{ "description", Description },
@@ -109,8 +106,7 @@ public class MainViewModel : INotifyPropertyChanged
 				{ "tags", "" }
 			};
 
-			var createdEntry = await _kimaiApi.CreateEntry(entry);
-			//Trace.TraceWarning(await createdEntry.Content.ReadAsStringAsync());
+			var createdEntry = await KimaiApi.Api.CreateEntry(entry);
 			if (createdEntry.StatusCode == System.Net.HttpStatusCode.OK)
 			{
 				Settings.CurrentTimesheetEntryId = createdEntry.Content!.Id;
@@ -128,21 +124,26 @@ public class MainViewModel : INotifyPropertyChanged
 		}
 	}
 
+	/// <summary>
+	/// Stops the last known entry.
+	/// </summary>
 	private async void Stop()
 	{
 		try
 		{
 			if (Settings.CurrentTimesheetEntryId is int id)
 			{
-				var response = await _kimaiApi.UpdateEntryDescription(id, new()
+				// updates the last known entry with the description and the current time
+				var response = await KimaiApi.Api.UpdateEntryDescription(id, new()
 				{
 					{ "description", Description },
-					{ "end", DateTime.UtcNow }
+					{ "end", DateTime.Now }
 				});
+
 				if (response.StatusCode != System.Net.HttpStatusCode.OK)
-				{
 					MessageBox.Show($"Beim Stoppen ist etwas schief gelaufen: {response.ReasonPhrase}.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-				}
+
+				// stop the entry (even if there were errors, since we can't regain control over the last entry
 				Settings.CurrentTimesheetEntryId = null;
 				CurrentEntry = new();
 				OnIsStartedChanged();
@@ -156,13 +157,16 @@ public class MainViewModel : INotifyPropertyChanged
 		}
 	}
 
+	/// <summary>
+	/// Notify that a transaction has started/ended.
+	/// </summary>
 	private void OnIsStartedChanged()
 	{
 		OnPropertyChanged(nameof(IsStarted));
 		OnPropertyChanged(nameof(IsNotStarted));
 	}
 
-	public event PropertyChangedEventHandler PropertyChanged;
+	public event PropertyChangedEventHandler? PropertyChanged;
 
 	protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
 	{
@@ -176,18 +180,11 @@ public class MainViewModel : INotifyPropertyChanged
 	/// <returns></returns>
 	internal async Task Fetch()
 	{
-		var projects_result = await _kimaiApi.GetProjects();
+		await MakeSureConnected();
 
-		if (!projects_result.IsSuccessStatusCode)
-		{
-			if (TryAuthorize() is bool result && result)
-			{
-				await Fetch();
-			}
-		}
-		var activities_result = await _kimaiApi.GetActivities();
-
-		var me_result = await _kimaiApi.GetMe();
+		var projects_result = await KimaiApi.Api.GetProjects();
+		var activities_result = await KimaiApi.Api.GetActivities();
+		var me_result = await KimaiApi.Api.GetMe();
 
 		Settings.UserId = me_result.Id;
 
@@ -205,7 +202,7 @@ public class MainViewModel : INotifyPropertyChanged
 		// now, fetch the current entry
 		if (Settings.CurrentTimesheetEntryId is int id)
 		{
-			var entry_response = await _kimaiApi.GetEntry(id);
+			var entry_response = await KimaiApi.Api.GetEntry(id);
 			if (entry_response.IsSuccessStatusCode && entry_response.Content is KimaiSheetEntry entry)
 			{
 				Description = entry.Description;

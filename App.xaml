@@ -9,5 +9,26 @@
             <Setter Property="OverridesDefaultStyle" Value="True" />
             <Setter Property="Icon" Value="/Watch_1.ico" />
         </Style>
+
+        <Style TargetType="Label">
+            <Setter Property="Padding" Value="3" />
+            <Setter Property="Margin" Value="0" />
+        </Style>
+
+        <Style x:Key="HeaderStyle" TargetType="Label">
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+
+        <Style TargetType="Button">
+            <Setter Property="Width" Value="100" />
+            <Setter Property="Margin" Value="5,2,5,10" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+
+        <Style TargetType="TextBox">
+            <Setter Property="Padding" Value="5,0" />
+        </Style>
     </Application.Resources>
 </Application>

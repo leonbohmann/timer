@@ -5,12 +5,11 @@ using System.Text.Json.Serialization;
 namespace Timer;
 
 [JsonSerializable(typeof(TimerSettings))]
-public class TimerSettings : ISettings
+public class TimerSettings
 {
 	private static TimerSettings _current;
 
 	public string Server { get; set; } = "";
-	public string Username { get; set; } = "";
 	public string Token { get; set; } = "";
 
 	public int? CurrentTimesheetEntryId { get; set; } = null;
@@ -20,15 +19,6 @@ public class TimerSettings : ISettings
 	public int? ProjectId { get; set; }
 
 	static readonly string name = "settings.json";
-
-	public async Task<bool> CheckAuthorized(IKimaiApi api)
-	{
-		var response = await api.GetProjects();
-		if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
-			return false;
-
-		return true;
-	}
 
 	public static TimerSettings Load()
 	{

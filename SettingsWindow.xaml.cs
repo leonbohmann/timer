@@ -6,14 +6,25 @@ namespace Timer;
 /// </summary>
 public partial class SettingsWindow : Window
 {
-	public SettingsWindow(ISettings settings)
+	private readonly TimerSettings _settings;
+
+	public SettingsWindow(TimerSettings settings)
 	{
 		InitializeComponent();
+		_settings = settings;
 		this.DataContext = new LoginViewModel(settings);
 	}
 
-	private void Button_Click(object sender, RoutedEventArgs e)
+	private async void Button_Click(object sender, RoutedEventArgs e)
 	{
+		KimaiApi.CreateApi(_settings);
+
+		if (await KimaiApi.CheckAuthorized() == false)
+		{
+			MessageBox.Show("Verbindung war nicht möglich!");
+			return;
+		}
+
 		DialogResult = true;
 	}
 }

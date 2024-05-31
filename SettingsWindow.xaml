@@ -8,12 +8,14 @@
     Title="SettingsWindow"
     d:DataContext="{d:DesignInstance local:LoginViewModel}"
     SizeToContent="WidthAndHeight"
+    WindowStartupLocation="CenterOwner"
     mc:Ignorable="d">
     <Window.Resources>
         <Style TargetType="TextBox">
             <Setter Property="Width" Value="300" />
             <Setter Property="Height" Value="25" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Margin" Value="3" />
         </Style>
         <Style TargetType="Label">
             <Setter Property="Width" Value="100" />
@@ -28,13 +30,10 @@
             <RowDefinition />
         </Grid.RowDefinitions>
 
-        <StackPanel Orientation="Horizontal">
+        <Label Content="Server-Daten eingeben:" Style="{StaticResource HeaderStyle}" />
+        <StackPanel Grid.Row="1" Orientation="Horizontal">
             <Label Content="Server:" />
             <TextBox Text="{Binding Server}" />
-        </StackPanel>
-        <StackPanel Grid.Row="1" Orientation="Horizontal">
-            <Label Content="User:" />
-            <TextBox Text="{Binding Username}" />
         </StackPanel>
         <StackPanel Grid.Row="2" Orientation="Horizontal">
             <Label Content="Token:" />

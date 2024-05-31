@@ -6,9 +6,7 @@
     Title="Easy Timer"
     Width="450"
     Height="230"
-    Loaded="Window_Loaded"
-    ResizeMode="NoResize"
-    WindowStyle="ToolWindow">
+    Loaded="Window_Loaded">
     <Window.DataContext>
         <local:MainViewModel />
     </Window.DataContext>
@@ -55,6 +53,24 @@
             <RowDefinition />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
+
+        <Border Grid.RowSpan="3" Panel.ZIndex="2">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Visibility" Value="Visible" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsReady}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <Border.Background>
+                <SolidColorBrush Opacity="0.7" Color="White" />
+            </Border.Background>
+
+            <Label HorizontalAlignment="Center" VerticalAlignment="Center" Content="Daten werden abgerufen..." />
+        </Border>
 
         <!--  Activity Selection and Buttons Section  -->
         <Grid Margin="10">

@@ -25,6 +25,7 @@ public class MainViewModel : INotifyPropertyChanged
 
 	public bool IsStarted => Settings.CurrentTimesheetEntryId.HasValue;
 	public bool IsNotStarted => !IsStarted;
+	public bool IsReady { get; set; } = false;
 
 	[OnChangedMethod(nameof(OnSelectedProjectAndActivityChanged))]
 	public KimaiActivity SelectedActivity { get; set; }
@@ -47,7 +48,14 @@ public class MainViewModel : INotifyPropertyChanged
 	public MainViewModel()
 	{
 		Settings = TimerSettings.Load();
-		if (Settings.Server == "") TryAuthorize();
+		if (Settings.Server == "")
+		{
+			if (TryAuthorize() is not bool res)
+			{
+				Application.Current.Shutdown();
+			}
+		}
+
 
 		var serveradress = $"{Settings.Server}/api";
 		// Initialize Refit API interface
@@ -131,18 +139,13 @@ public class MainViewModel : INotifyPropertyChanged
 					{ "description", Description },
 					{ "end", DateTime.UtcNow }
 				});
-				if (response.StatusCode == System.Net.HttpStatusCode.OK)
-				{
-					Settings.CurrentTimesheetEntryId = null;
-					CurrentEntry = new();
-					OnIsStartedChanged();
-				}
-				else
+				if (response.StatusCode != System.Net.HttpStatusCode.OK)
 				{
 					MessageBox.Show($"Beim Stoppen ist etwas schief gelaufen: {response.ReasonPhrase}.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-					Settings.CurrentTimesheetEntryId = null;
-					CurrentEntry = new();
 				}
+				Settings.CurrentTimesheetEntryId = null;
+				CurrentEntry = new();
+				OnIsStartedChanged();
 			}
 			else
 				MessageBox.Show("No active entry to update description.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -161,11 +164,16 @@ public class MainViewModel : INotifyPropertyChanged
 
 	public event PropertyChangedEventHandler PropertyChanged;
 
-	protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
+	protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
 	{
 		PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 	}
 
+	/// <summary>
+	/// Fetches current data from the server.
+	/// Initializes base information about the current entry as well as available projects and activities.
+	/// </summary>
+	/// <returns></returns>
 	internal async Task Fetch()
 	{
 		var projects_result = await _kimaiApi.GetProjects();
@@ -201,12 +209,12 @@ public class MainViewModel : INotifyPropertyChanged
 			if (entry_response.IsSuccessStatusCode && entry_response.Content is KimaiSheetEntry entry)
 			{
 				Description = entry.Description;
-				OnIsStartedChanged();
 			}
 			else
 				MessageBox.Show($"Beim Laden des letzten Eintrags traten Fehler auf: {entry_response.ReasonPhrase}", "Warning", MessageBoxButton.OK, MessageBoxImage.Warning);
-
-
+			OnIsStartedChanged();
 		}
+
+		IsReady = true;
 	}
 }
